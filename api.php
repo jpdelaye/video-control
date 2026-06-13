@@ -16,9 +16,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 
 // ── Database Configuration ──────────────────────────
 define('DB_HOST', 'localhost');
-define('DB_USER', 'u659317277_bruno');
-define('DB_PASS', '$Bruno123456$');
-define('DB_NAME', 'u659317277_bruno');
+define('DB_USER', '');
+define('DB_PASS', '');
+define('DB_NAME', '');
 
 // ── Connect ─────────────────────────────────────────
 function getDB(): mysqli {
