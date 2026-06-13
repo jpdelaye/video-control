@@ -17,6 +17,3 @@ Abre `index.html` en el navegador para usar el panel de control.
 
 Para la pantalla remota, abre `player.html` en el dispositivo o ventana donde quieras reproducir los videos.
 
-## Seguridad
-
-El archivo `.vscode/sftp.json` esta excluido del repositorio porque contiene configuracion privada de despliegue.
