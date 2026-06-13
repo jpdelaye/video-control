@@ -1,17 +1,53 @@
-# Video Control
+# Bruno TV Control
 
-Aplicacion web para controlar una pantalla remota de reproduccion de videos de YouTube.
+![Bruno TV Control](docs/control.jpg)
 
-## Archivos principales
+**Bruno TV Control** es una aplicacion web para buscar videos de YouTube, organizar listas y controlar una pantalla remota de reproduccion desde un panel principal.
 
-- `index.html`: panel de control para buscar videos, administrar listas y manejar la reproduccion.
-- `player.html`: visor remoto pensado para abrirse en la pantalla de reproduccion.
-- `player_web.html`: variante web del visor.
-- `api.php`: endpoint auxiliar para comunicacion del proyecto.
-- `styles.css`: estilos de la interfaz.
-- `manifest.json` y `manifest_control.json`: manifiestos PWA para el visor y el control.
+[![Demo Control](https://img.shields.io/badge/Demo-Control-ff0033?style=for-the-badge)](https://intelector.com/bruno/)
+[![Demo Visor](https://img.shields.io/badge/Demo-Visor-111111?style=for-the-badge)](https://intelector.com/bruno/player.html)
+[![Estado](https://img.shields.io/badge/Estado-En%20desarrollo-2ea44f?style=for-the-badge)](#)
 
-## Uso
+## Vista general
+
+El proyecto separa la experiencia en dos pantallas:
+
+- **Control**: interfaz para buscar videos, crear listas, manejar la cola y controlar reproduccion, volumen y progreso.
+- **Visor**: pantalla remota fullscreen pensada para TV, navegador secundario o dispositivo dedicado.
+
+![Visor remoto](docs/player.jpg)
+
+## Funciones
+
+- Busqueda de videos de YouTube o carga directa por enlace.
+- Listas predefinidas y listas personalizadas.
+- Cola de reproduccion con acciones rapidas.
+- Controles remotos de play, pausa, anterior, siguiente, volumen y progreso.
+- Modo visor fullscreen para pantalla externa.
+- Manifiestos PWA para instalar el control o el visor como app.
+
+## Demos
+
+- Panel de control: <https://intelector.com/bruno/>
+- Visor remoto: <https://intelector.com/bruno/player.html>
+
+> Nota: la ruta publica funcional del visor es `player.html`.
+
+## Estructura
+
+```text
+.
+|-- index.html              # Panel de control principal
+|-- player.html             # Visor remoto fullscreen
+|-- player_web.html         # Variante web del visor
+|-- api.php                 # Endpoint auxiliar
+|-- styles.css              # Estilos del proyecto
+|-- manifest.json           # Manifest PWA del visor
+|-- manifest_control.json   # Manifest PWA del control
+`-- docs/                   # Imagenes usadas en el README
+```
+
+## Uso local
 
 Abre `index.html` en el navegador para usar el panel de control.
 
