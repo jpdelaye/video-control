@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Visor TV">
+  <meta name="theme-color" content="#0f0f13">
+  <link rel="manifest" href="manifest.json">
+  <title>YouTube Fullscreen Viewer</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- NoSleep.js prevents the screen from going to sleep on iOS/iPadOS -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/nosleep/0.12.0/NoSleep.min.js"></script>
+</head>
+
+<body class="fullscreen-body">
+
+  <!-- Player Containment -->
+  <div class="player-wrapper" id="player-wrapper">
+    <div id="yt-player"></div>
+  </div>
+
+  <!-- Central HUD Alerts (Apple TV style overlays) -->
+  <div class="hud-center-alert" id="center-alert">
+    <i class="fa-solid fa-play" id="center-alert-icon"></i>
+    <span id="center-alert-text">PAUSADO</span>
+  </div>
+
+  <!-- Fullscreen HUD -->
+  <div class="player-hud" id="player-hud">
+    <div class="hud-top">
+      <div class="hud-logo">BRUNO<span>TV</span></div>
+      <div class="hud-status">
+        <div class="status-dot"></div>
+        <span>MODO VISOR ACTIVO</span>
+      </div>
+    </div>
+
+    <div class="hud-bottom">
+      <div class="hud-now-playing">
+        <img src="https://img.youtube.com/vi/5G2T8KscUio/hqdefault.jpg" class="hud-thumbnail" id="hud-thumbnail"
+          alt="Miniatura">
+        <div class="hud-meta">
+          <p>Reproduciendo ahora</p>
+          <h2 id="hud-title">Deep Forest Ambient - Birds Singing & River flow</h2>
+        </div>
+      </div>
+      <div class="hud-progress-bar">
+        <div class="hud-progress-fill" id="hud-progress-fill"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Connect Overlay (satisfies browser autoplay policy) -->
+  <div id="connect-overlay" style="
+    position:fixed; inset:0; z-index:9999;
+    background:radial-gradient(ellipse at center, #0f0f1a 0%, #000 100%);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    cursor:pointer; user-select:none;
+    transition: opacity .5s ease;
+  ">
+    <div id="co-thumb-wrap" style="
+      width:200px; height:120px; border-radius:16px; overflow:hidden;
+      border:2px solid rgba(255,255,255,0.12);
+      box-shadow:0 20px 60px rgba(0,0,0,0.7);
+      margin-bottom:32px;
+      background:#111;
+      display:flex; align-items:center; justify-content:center;
+    ">
+      <img id="co-thumb" src="" alt="" style="width:100%;height:100%;object-fit:cover;display:none;">
+      <i id="co-thumb-icon" class="fa-brands fa-youtube" style="font-size:3rem;color:#ff0000;"></i>
+    </div>
+    <div style="
+      width:72px; height:72px; border-radius:50%;
+      background:linear-gradient(135deg,#6366f1,#a855f7);
+      display:flex; align-items:center; justify-content:center;
+      box-shadow:0 0 40px rgba(99,102,241,0.5);
+      margin-bottom:24px;
+      animation: coPulse 2s ease-in-out infinite;
+    ">
+      <i class="fa-solid fa-play" style="font-size:1.6rem;color:#fff;margin-left:4px;"></i>
+    </div>
+    <h2 id="co-title" style="font-size:1.1rem;color:#fff;font-weight:700;margin:0 0 8px;letter-spacing:0.05em;">YT
+      REMOTE VIEWER</h2>
+    <p style="font-size:0.85rem;color:rgba(255,255,255,0.5);margin:0;">Toca en cualquier lugar para conectar</p>
+    <style>
+      @keyframes coPulse {
+
+        0%,
+        100% {
+          transform: scale(1);
+          box-shadow: 0 0 40px rgba(99, 102, 241, 0.5);
+        }
+
+        50% {
+          transform: scale(1.08);
+          box-shadow: 0 0 60px rgba(99, 102, 241, 0.8);
+        }
+      }
+    </style>
+  </div>
+
+  <!-- YouTube Iframe API Loader & Synchronization Logic -->
+  <script>
+    // Load YouTube Iframe API dynamically
+    const tag = document.createElement('script');
+    tag.src = "https://www.youtube.com/iframe_api";
+    const firstScriptTag = document.getElementsByTagName('script')[0];
+    firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+
+    let player;
+    let channel;
+    let progressInterval;
+    let noSleep = new NoSleep(); // Inicializar NoSleep de inmediato
+    
+    let activeVideoData = {
+      id: '5G2T8KscUio',
+      title: 'Deep Forest Ambient - Birds Singing & River flow',
+      thumbnail: 'https://img.youtube.com/vi/5G2T8KscUio/hqdefault.jpg'
+    };
+
+    // Server polling state
+    const API_URL = 'api.php';
+    let lastCommandId = 0;       // track last executed command to avoid re-running
+    let pollingInterval = null;
+
+    // HUD element control timers
+    let hudTimeout;
+    let alertTimeout;
+
+    const centerAlert = document.getElementById('center-alert');
+    const centerAlertIcon = document.getElementById('center-alert-icon');
+    const centerAlertText = document.getElementById('center-alert-text');
+    const playerHud = document.getElementById('player-hud');
+    const hudTitle = document.getElementById('hud-title');
+    const hudThumbnail = document.getElementById('hud-thumbnail');
+    const hudProgressFill = document.getElementById('hud-progress-fill');
+
+    // Show HUD on load — but don't call showHUD() yet; overlay is on top
+    // showHUD(true) is called after user dismisses the connect overlay
+
+    // Create YouTube player instance
+    function onYouTubeIframeAPIReady() {
+      const playerVars = {
+        autoplay: 0,
+        controls: 0, // hide native controls
+        disablekb: 1,
+        fs: 0,
+        rel: 0,
+        iv_load_policy: 3,
+        modestbranding: 1
+      };
+
+      if (window.location.origin && window.location.origin.startsWith('http')) {
+        playerVars.origin = window.location.origin;
+      }
+
+      player = new YT.Player('yt-player', {
+        height: '100%',
+        width: '100%',
+        videoId: '5G2T8KscUio', // Default standard embeddable video
+        playerVars: playerVars,
+        events: {
+          'onReady': onPlayerReady,
+          'onStateChange': onPlayerStateChange,
+          'onError': onPlayerError
+        }
+      });
+    }
+
+    function onPlayerReady(event) {
+      console.log('YouTube Remote Player is ready.');
+      initializeBroadcastChannel();
+      // Polling starts only after the connect overlay is dismissed
+      // (see connectOverlay click handler below)
+
+      // Let's send initial handshake
+      sendStatusUpdate();
+
+      // Heartbeat timer to periodically update the controller
+      setInterval(sendStatusUpdate, 1000);
+    }
+
+    function onPlayerStateChange(event) {
+      sendStatusUpdate();
+
+      // Show HUD when status changes
+      if (event.data === YT.PlayerState.PLAYING) {
+        showHUD();
+        triggerAlert('play', 'REPRODUCIR');
+
+        // Start tracking progress
+        if (progressInterval) clearInterval(progressInterval);
+        progressInterval = setInterval(() => {
+          if (player && player.getCurrentTime) {
+            const current = player.getCurrentTime();
+            const duration = player.getDuration() || 1;
+            const pct = (current / duration) * 100;
+            hudProgressFill.style.width = pct + '%';
+            sendStatusUpdate();
+          }
+        }, 500);
+
+      } else if (event.data === YT.PlayerState.PAUSED) {
+        showHUD(true); // Persist HUD when paused
+        triggerAlert('pause', 'PAUSADO');
+        if (progressInterval) clearInterval(progressInterval);
+      } else if (event.data === YT.PlayerState.ENDED) {
+        if (progressInterval) clearInterval(progressInterval);
+        // Inform controller that video ended (to play the next one)
+        if (channel) {
+          channel.postMessage({
+            type: 'VIDEO_ENDED',
+            payload: { videoId: activeVideoData.id }
+          });
+        }
+      }
+    }
+
+    function onPlayerError(e) {
+      console.error('YouTube Player Error:', e.data);
+      if (channel) {
+        channel.postMessage({
+          type: 'ERROR',
+          payload: { errorCode: e.data }
+        });
+      }
+    }
+
+    function handleIncomingCommand(type, payload) {
+      if (!player) return;
+      console.log('Processing command:', type, payload);
+
+      switch (type) {
+        case 'LOAD_VIDEO':
+          activeVideoData = payload;
+          hudTitle.textContent = payload.title;
+          hudThumbnail.src = payload.thumbnail;
+          player.loadVideoById(payload.id);
+          showHUD();
+          break;
+
+        case 'PLAY':
+          player.playVideo();
+          break;
+
+        case 'PAUSE':
+          player.pauseVideo();
+          break;
+
+        case 'SET_VOLUME':
+          player.setVolume(payload.volume);
+          triggerAlert('volume-high', `VOLUMEN ${payload.volume}%`);
+          break;
+
+        case 'SEEK':
+          if (player.getDuration) {
+            const seconds = (payload.percent / 100) * player.getDuration();
+            player.seekTo(seconds, true);
+          }
+          break;
+
+        case 'PING':
+          sendStatusUpdate();
+          break;
+      }
+    }
+
+    function initializeBroadcastChannel() {
+      // 1. Try BroadcastChannel
+      try {
+        channel = new BroadcastChannel('youtube_remote_control');
+        channel.onmessage = function (event) {
+          const { type, payload } = event.data;
+          handleIncomingCommand(type, payload);
+        };
+      } catch (e) {
+        console.warn('BroadcastChannel not supported or blocked, relying on localStorage events only.');
+      }
+
+      // 2. Storage Event Listener (Fallback / Dual Sync for file:// protocol)
+      window.addEventListener('storage', (event) => {
+        if (event.key === 'yt_remote_command' && event.newValue) {
+          try {
+            const cmd = JSON.parse(event.newValue);
+            handleIncomingCommand(cmd.type, cmd.payload);
+          } catch (err) {
+            console.error('Error parsing localStorage command:', err);
+          }
+        }
+      });
+    }
+
+    // ── Server Polling (multi-device sync) ──────────────
+    let isFirstPoll = true; // flag for initial connection sync
+
+    function startServerPolling() {
+      if (pollingInterval) return; // already running
+      pollingInterval = setInterval(async () => {
+        try {
+          const res = await fetch(`${API_URL}?action=get_state`, { cache: 'no-store' });
+          const data = await res.json();
+          if (!data.success || !data.state) return;
+
+          const s = data.state;
+
+          // ── Initial connection: always sync current video ─────
+          if (isFirstPoll && s.video_id) {
+            isFirstPoll = false;
+            lastCommandId = s.command_id; // mark as seen so we don't re-run below
+
+            // Load the current video regardless of last command type
+            handleIncomingCommand('LOAD_VIDEO', {
+              id: s.video_id,
+              title: s.title,
+              thumbnail: s.thumbnail
+            });
+
+            // If the controller was playing, autoplay (user gesture already given via overlay)
+            if (s.command === 'LOAD_VIDEO' || s.command === 'PLAY') {
+              // Small delay to let loadVideoById start buffering first
+              setTimeout(() => { if (player) player.playVideo(); }, 800);
+            }
+            return;
+          }
+
+          // ── Normal operation: only act on NEW commands ─────
+          if (s.command_id <= lastCommandId) return;
+          lastCommandId = s.command_id;
+
+          // Ignore read-only / status-only commands
+          if (s.command === 'IDLE' || s.command === 'PING' || s.command === 'STATUS_UPDATE') return;
+
+          console.log('[Remote Sync] Received command:', s.command, s);
+
+          switch (s.command) {
+            case 'LOAD_VIDEO':
+              handleIncomingCommand('LOAD_VIDEO', {
+                id: s.video_id,
+                title: s.title,
+                thumbnail: s.thumbnail
+              });
+              break;
+            case 'PLAY':
+              handleIncomingCommand('PLAY', {});
+              break;
+            case 'PAUSE':
+              handleIncomingCommand('PAUSE', {});
+              break;
+            case 'SET_VOLUME':
+              handleIncomingCommand('SET_VOLUME', { volume: s.volume });
+              break;
+            case 'SEEK':
+              handleIncomingCommand('SEEK', { percent: s.seek_pct });
+              break;
+          }
+        } catch (e) {
+          // network blip — silently continue polling
+        }
+      }, 1500);
+    }
+
+    // ── Connect Overlay (tap to unlock autoplay) ──────
+    const connectOverlay = document.getElementById('connect-overlay');
+    const coThumb = document.getElementById('co-thumb');
+    const coThumbIcon = document.getElementById('co-thumb-icon');
+    const coTitle = document.getElementById('co-title');
+
+    // Pre-fetch state to show current video thumbnail on overlay
+    fetch(`${API_URL}?action=get_state`, { cache: 'no-store' })
+      .then(r => r.json())
+      .then(data => {
+        if (data.success && data.state && data.state.video_id) {
+          coThumb.src = data.state.thumbnail || `https://img.youtube.com/vi/${data.state.video_id}/hqdefault.jpg`;
+          coThumb.style.display = 'block';
+          coThumbIcon.style.display = 'none';
+          coTitle.textContent = data.state.title || 'YT REMOTE VIEWER';
+        }
+      }).catch(() => { });
+
+    connectOverlay.addEventListener('click', async () => {
+      // Activar NoSleep de inmediato en el click (debe ser síncrono)
+      try {
+        noSleep.enable();
+      } catch (err) {
+        console.error('NoSleep enable error:', err);
+      }
+
+      // 0. Request Fullscreen (PWA/Safari behavior)
+      const docElm = document.documentElement;
+      if (docElm.requestFullscreen) docElm.requestFullscreen().catch(() => { });
+      else if (docElm.webkitRequestFullscreen) docElm.webkitRequestFullscreen();
+      else if (docElm.mozRequestFullScreen) docElm.mozRequestFullScreen();
+      else if (docElm.msRequestFullscreen) docElm.msRequestFullscreen();
+
+      // 1. Fade out overlay immediately
+      connectOverlay.style.opacity = '0';
+      setTimeout(() => connectOverlay.remove(), 500);
+
+      // 2. Immediately fetch current state and play — no waiting for first poll tick
+      try {
+        const res = await fetch(`${API_URL}?action=get_state`, { cache: 'no-store' });
+        const data = await res.json();
+        if (data.success && data.state && data.state.video_id) {
+          const s = data.state;
+          isFirstPoll = false;       // skip first-poll logic in interval
+          lastCommandId = s.command_id;
+
+          // Load the video into the player
+          handleIncomingCommand('LOAD_VIDEO', {
+            id: s.video_id,
+            title: s.title,
+            thumbnail: s.thumbnail
+          });
+
+          // Play unless the controller explicitly paused it
+          if (s.command !== 'PAUSE') {
+            setTimeout(() => { if (player) player.playVideo(); }, 700);
+          }
+        }
+      } catch (e) {
+        // If fetch fails just show HUD and wait for next poll
+      }
+
+      // 3. Show HUD and start the regular polling loop
+      showHUD(true);
+      startServerPolling();
+      requestWakeLock();
+    });
+
+    // ── Screen Wake Lock API ──────
+    let wakeLock = null;
+
+    async function requestWakeLock() {
+      // Try standard Wake Lock API first (iOS 16.4+)
+      try {
+        if ('wakeLock' in navigator) {
+          wakeLock = await navigator.wakeLock.request('screen');
+          wakeLock.addEventListener('release', () => {
+            console.log('Screen Wake Lock released');
+          });
+          console.log('Screen Wake Lock acquired');
+        }
+      } catch (err) {
+        console.error(`Wake Lock Error: ${err.name}, ${err.message}`);
+      }
+    }
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        requestWakeLock();
+      }
+    });
+
+    function sendStatusUpdate() {
+      if (!player || typeof player.getPlayerState !== 'function') return;
+
+      let playerState = -1;
+      let currentTime = 0;
+      let duration = 0;
+      let volume = 50;
+
+      try {
+        playerState = player.getPlayerState();
+        currentTime = player.getCurrentTime();
+        duration = player.getDuration();
+        volume = player.getVolume();
+      } catch (e) {
+        // Player not ready
+      }
+
+      const statusData = {
+        state: playerState,
+        currentTime: currentTime,
+        duration: duration,
+        volume: volume,
+        video: activeVideoData
+      };
+
+      // Send to server (multi-device sync)
+      fetch(`${API_URL}?action=player_status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'player_status', status: statusData })
+      }).catch(() => { });
+
+      // Send via BroadcastChannel
+      if (typeof channel !== 'undefined' && channel) {
+        try {
+          channel.postMessage({
+            type: 'STATUS_UPDATE',
+            payload: statusData
+          });
+        } catch (e) { }
+      }
+
+      // Send via localStorage (fallback / dual sync)
+      try {
+        localStorage.setItem('yt_remote_status', JSON.stringify({
+          ...statusData,
+          _timestamp: Date.now() // Force storage event to fire in other tabs
+        }));
+      } catch (e) {
+        // Ignored, might be blocked on iPad/Safari Private mode
+      }
+    }
+
+    // Display temporary overlay card
+    function showHUD(persist = false) {
+      playerHud.classList.add('visible');
+      if (hudTimeout) clearTimeout(hudTimeout);
+
+      if (!persist) {
+        hudTimeout = setTimeout(() => {
+          playerHud.classList.remove('visible');
+        }, 4000);
+      }
+    }
+
+    // Trigger visual notification popups
+    function triggerAlert(iconName, text) {
+      centerAlertIcon.className = `fa-solid fa-${iconName}`;
+      centerAlertText.textContent = text;
+      centerAlert.classList.add('visible');
+
+      if (alertTimeout) clearTimeout(alertTimeout);
+      alertTimeout = setTimeout(() => {
+        centerAlert.classList.remove('visible');
+      }, 1500);
+    }
+
+    // Allow local clicks to enable full screen if user double clicks anywhere
+    document.body.addEventListener('dblclick', () => {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(err => {
+          console.log(`Error standardizing fullscreen: ${err.message}`);
+        });
+      } else {
+        document.exitFullscreen();
+      }
+    });
+  </script>
+</body>
+
+</html>

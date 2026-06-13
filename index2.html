@@ -1,0 +1,1691 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Bruno TV">
+  <meta name="theme-color" content="#0f0f13">
+  <link rel="manifest" href="manifest_control.json">
+  <title>Bruno Tv</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    /* Force completely vertical mobile layout (stacked) */
+    body {
+      height: auto !important;
+      overflow-y: auto !important;
+      background: var(--bg-primary);
+    }
+
+    .app-container {
+      display: flex !important;
+      flex-direction: column !important;
+      height: auto !important;
+      background: transparent !important;
+    }
+
+    /* Override any media queries or JS hiding */
+    .sidebar,
+    .main-content,
+    .queue-panel {
+      position: relative !important;
+      display: flex !important;
+      height: auto !important;
+      border: none !important;
+      border-bottom: 8px solid var(--bg-secondary) !important;
+      padding-bottom: 20px;
+      overflow: visible !important;
+    }
+
+    .panel-body {
+      overflow-y: visible !important;
+    }
+
+    /* Reorder: Playlists first, Search second, Player/Queue third */
+    .sidebar {
+      order: 1;
+      border-bottom: 8px solid var(--bg-secondary) !important;
+    }
+
+    .main-content {
+      order: 2;
+      border-bottom: 8px solid var(--bg-secondary) !important;
+    }
+
+    .queue-panel {
+      order: 3;
+      border-top: none !important;
+      border-bottom: none !important;
+    }
+
+    /* Hide the tab bar since we are scrolling vertically */
+    .mobile-tab-bar {
+      display: none !important;
+    }
+
+    /* Make video grid single column */
+    .video-grid {
+      grid-template-columns: 1fr !important;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="app-container">
+
+    <!-- Sidebar: Playlists & Libraries -->
+    <div class="sidebar">
+      <div class="panel-header"
+        style="display: flex; justify-content: space-between; align-items: center; padding-top: 14px; padding-bottom: 14px;">
+        <h1>BRUNO<span>TV </span></h1>
+        <div style="display: flex; gap: 8px;">
+          <button class="btn" id="btn-open-player" title="Abrir Visor" style="padding: 6px 12px; font-size: 0.85rem;"><i
+              class="fa-solid fa-external-link"></i> Abrir Visor</button>
+          <button class="btn btn-primary" id="btn-create-playlist" title="Nueva Playlist"
+            style="padding: 6px 10px; font-size: 0.85rem;"><i class="fa-solid fa-folder-plus"></i></button>
+        </div>
+      </div>
+
+      <div class="panel-body">
+        <!-- Search bar -->
+        <div class="input-group" style="margin-bottom: 24px;">
+          <input type="text" id="search-input" placeholder="Buscar en YouTube o pegar enlace del video...">
+          <button class="btn btn-primary" id="btn-search"><i class="fa-solid fa-magnifying-glass"></i> Buscar</button>
+        </div>
+
+        <div style="margin-bottom: 24px;">
+          <h3
+            style="font-size: 0.8rem; text-transform: uppercase; color: var(--text-muted); margin-bottom: 12px; letter-spacing: 0.05em;">
+            Listas Predefinidas</h3>
+          <ul class="playlist-list" id="preset-playlists">
+            <!-- Populated via JS -->
+          </ul>
+        </div>
+
+        <div>
+          <h3
+            style="font-size: 0.8rem; text-transform: uppercase; color: var(--text-muted); margin-bottom: 12px; letter-spacing: 0.05em;">
+            Mis Listas</h3>
+          <ul class="playlist-list" id="custom-playlists">
+            <!-- Populated via JS -->
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Section: Search and Discovery -->
+    <div class="main-content">
+      <div class="panel-body" style="padding-top: 0;">
+
+        <!-- Video Results Grid -->
+        <h3 id="results-heading" style="margin-bottom: 16px; font-size: 1.1rem; font-weight: 600;">Videos Sugeridos</h3>
+        <div class="video-grid" id="video-results">
+          <!-- Populated via JS -->
+        </div>
+
+        <!-- Related Videos Section -->
+        <div id="related-section" style="margin-top: 32px; display: none;">
+          <h3 id="related-heading" style="margin-bottom: 16px; font-size: 1.1rem; font-weight: 600;">
+            <i class="fa-solid fa-wand-magic-sparkles" style="color: var(--accent); margin-right: 6px;"></i>
+            Videos Relacionados
+          </h3>
+          <div class="video-grid" id="related-results">
+            <!-- Populated via JS -->
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right Panel: Queue & Active Controller -->
+    <div class="queue-panel">
+      <!-- Active player status & info -->
+      <div class="active-player-state">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span style="font-size: 0.8rem; color: var(--text-secondary);">Pantalla Remota <span id="debug-ping" style="color:red; font-size: 0.6rem; margin-left: 5px;"></span></span>
+          <div class="player-status-badge status-disconnected" id="player-status">
+            <div class="status-dot"></div>
+            <span id="player-status-text">Desconectado</span>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 12px; align-items: center;">
+          <img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" id="active-thumb"
+            style="width: 70px; height: 45px; object-fit: cover; border-radius: var(--radius-sm); border: 1px solid var(--border);"
+            alt="Thumb">
+          <div style="min-width: 0; flex: 1;">
+            <p class="now-playing-title" id="active-title">Ningún video en reproducción</p>
+            <p style="font-size: 0.75rem; color: var(--text-muted);" id="active-channel">-</p>
+          </div>
+        </div>
+
+        <!-- Timeline Progress Slider -->
+        <div class="progress-container">
+          <span id="time-current">0:00</span>
+          <input type="range" class="slider-bar" id="progress-slider" min="0" max="100" value="0">
+          <span id="time-duration">0:00</span>
+        </div>
+
+        <!-- Controls -->
+        <div class="playback-controls">
+          <div class="control-buttons">
+            <button class="control-btn" id="btn-prev" title="Anterior"><i
+                class="fa-solid fa-backward-step"></i></button>
+            <button class="control-btn btn-play-pause" id="btn-play-pause" title="Play/Pausa"><i
+                class="fa-solid fa-play"></i></button>
+            <button class="control-btn" id="btn-next" title="Siguiente"><i
+                class="fa-solid fa-forward-step"></i></button>
+          </div>
+
+          <div class="volume-control">
+            <i class="fa-solid fa-volume-high" id="volume-icon"></i>
+            <input type="range" class="slider-bar" id="volume-slider" min="0" max="100" value="50">
+          </div>
+        </div>
+      </div>
+
+      <!-- Queue Header & List -->
+      <div class="panel-header" style="padding: 16px 20px; justify-content: space-between;">
+        <h3 style="font-size: 1rem; font-weight: 600;"><i class="fa-solid fa-list-ul"></i> Cola de Reproducción</h3>
+        <div style="display: flex; gap: 8px;">
+          <button class="btn" id="btn-save-queue" title="Guardar toda la cola en playlist" style="padding: 6px 10px; font-size: 0.8rem;"><i class="fa-solid fa-folder-plus"></i></button>
+          <button class="btn" id="btn-toggle-repeat" title="Repetir todo"
+            style="padding: 6px 10px; font-size: 0.8rem;"><i class="fa-solid fa-repeat"></i></button>
+          <button class="btn btn-danger" id="btn-clear-queue" title="Limpiar Cola"
+            style="padding: 6px 10px; font-size: 0.8rem;"><i class="fa-solid fa-trash"></i></button>
+        </div>
+      </div>
+
+      <div class="panel-body" style="padding: 16px 20px;">
+        <ul class="queue-list" id="queue-list-container">
+          <!-- Populated via JS -->
+        </ul>
+      </div>
+    </div>
+
+  </div><!-- /.app-container -->
+
+
+
+  <!-- Dialog / Modal for Direct URL -->
+  <div id="url-modal"
+    style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.7); backdrop-filter: blur(8px); z-index: 100; align-items: center; justify-content: center;">
+    <div
+      style="background: var(--bg-secondary); border: 1px solid var(--border); padding: 30px; border-radius: var(--radius-lg); width: 90%; max-width: 500px; box-shadow: var(--shadow);">
+      <h3 style="margin-bottom: 16px; font-size: 1.2rem;"><i class="fa-solid fa-link" style="color: var(--accent);"></i>
+        Cargar Enlace Directo</h3>
+      <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 20px;">Pega el enlace de YouTube o el
+        ID del video directamente en el campo inferior:</p>
+      <input type="text" id="direct-url-input" placeholder="Ej: https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+        style="width: 100%; margin-bottom: 20px;">
+      <div style="display: flex; justify-content: flex-end; gap: 10px;">
+        <button class="btn" id="btn-cancel-modal">Cancelar</button>
+        <button class="btn btn-primary" id="btn-submit-modal">Agregar y Reproducir</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Guardar toda la cola -->
+  <div id="save-queue-modal" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.75); backdrop-filter:blur(10px); z-index:200; align-items:center; justify-content:center;">
+    <div style="background:var(--bg-secondary); border:1px solid var(--border); border-radius:var(--radius-lg); width:90%; max-width:420px; box-shadow:0 24px 64px rgba(0,0,0,0.6); padding: 24px;">
+      <h3 style="margin-bottom: 16px; font-size: 1.2rem;"><i class="fa-solid fa-layer-group" style="color: var(--accent);"></i> Guardar Cola</h3>
+      
+      <p style="font-size:0.85rem; color:var(--text-secondary); margin-bottom: 16px;">Selecciona una playlist existente o crea una nueva para guardar los videos actuales.</p>
+      
+      <div style="margin-bottom: 16px;">
+        <label style="display:block; font-size:0.8rem; margin-bottom:6px; color:var(--text-muted);">Playlist Existente</label>
+        <select id="sq-select-playlist" style="width:100%; padding: 10px; background:var(--bg-primary); border:1px solid var(--border); color:var(--text); border-radius:var(--radius-md);">
+          <option value="">-- Seleccionar o crear nueva --</option>
+        </select>
+      </div>
+
+      <div style="margin-bottom: 24px;">
+        <label style="display:block; font-size:0.8rem; margin-bottom:6px; color:var(--text-muted);">O crear Nueva Playlist</label>
+        <input type="text" id="sq-new-playlist" placeholder="Nombre de la nueva playlist..." style="width:100%; padding: 10px; background:var(--bg-primary); border:1px solid var(--border); color:var(--text); border-radius:var(--radius-md);">
+      </div>
+
+      <div style="display:flex; justify-content:flex-end; gap:10px;">
+        <button class="btn" id="sq-btn-cancel">Cancelar</button>
+        <button class="btn btn-primary" id="sq-btn-save">Guardar Cola</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Seleccionar Playlist para guardar video -->
+  <div id="playlist-picker-modal"
+    style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.75); backdrop-filter:blur(10px); z-index:200; align-items:center; justify-content:center;">
+    <div
+      style="background:var(--bg-secondary); border:1px solid var(--border); border-radius:var(--radius-lg); width:90%; max-width:420px; box-shadow:0 24px 64px rgba(0,0,0,0.6); overflow:hidden; animation: ppSlideIn .22s cubic-bezier(.34,1.56,.64,1);">
+      <div
+        style="padding:22px 24px 18px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between;">
+        <div style="display:flex; align-items:center; gap:12px;">
+          <div
+            style="width:38px; height:38px; background:linear-gradient(135deg,var(--accent),#a855f7); border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+            <i class="fa-solid fa-folder-plus" style="color:#fff; font-size:0.95rem;"></i>
+          </div>
+          <div style="min-width:0;">
+            <h3 style="font-size:1rem; font-weight:700; margin:0; line-height:1.2;">Guardar en Playlist</h3>
+            <p id="pp-video-title"
+              style="font-size:0.73rem; color:var(--text-muted); margin:3px 0 0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:230px;">
+            </p>
+          </div>
+        </div>
+        <button id="pp-btn-close"
+          style="background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:1.1rem; padding:6px 8px; border-radius:6px; line-height:1; transition:background .15s, color .15s;">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+      <div style="padding:14px 18px; max-height:340px; overflow-y:auto;" id="pp-list-container"></div>
+      <div style="padding:14px 24px; border-top:1px solid var(--border); display:flex; justify-content:flex-end;">
+        <button class="btn" id="pp-btn-cancel" style="font-size:0.85rem;">Cancelar</button>
+      </div>
+    </div>
+  </div>
+
+  <style>
+    @keyframes ppSlideIn {
+      from {
+        opacity: 0;
+        transform: scale(0.9) translateY(16px);
+      }
+
+      to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+      }
+    }
+
+    .pp-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 11px 12px;
+      border-radius: 10px;
+      border: 1px solid transparent;
+      cursor: pointer;
+      transition: background .15s, border-color .15s, transform .12s;
+      margin-bottom: 7px;
+    }
+
+    .pp-item:last-child {
+      margin-bottom: 0;
+    }
+
+    .pp-item:hover {
+      background: rgba(255, 255, 255, 0.07);
+      border-color: var(--border);
+      transform: translateX(4px);
+    }
+
+    .pp-item-icon {
+      width: 38px;
+      height: 38px;
+      border-radius: 9px;
+      flex-shrink: 0;
+      background: linear-gradient(135deg, rgba(99, 102, 241, 0.22), rgba(168, 85, 247, 0.18));
+      border: 1px solid rgba(99, 102, 241, 0.28);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.9rem;
+      color: var(--accent);
+    }
+
+    .pp-item-name {
+      font-size: 0.88rem;
+      font-weight: 500;
+      color: var(--text-primary);
+      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .pp-item-count {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      background: rgba(255, 255, 255, 0.06);
+      padding: 2px 9px;
+      border-radius: 20px;
+      flex-shrink: 0;
+    }
+
+    #pp-btn-close:hover {
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text-primary);
+    }
+  </style>
+
+  <!-- Custom Confirm Modal -->
+  <div id="custom-confirm-modal" class="modal-overlay"
+    style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; align-items: center; justify-content: center; z-index: 10000; background: rgba(0,0,0,0.8);">
+    <div class="modal-content"
+      style="max-width: 350px; text-align: center; background: var(--bg-secondary); padding: 24px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.1);">
+      <h3 id="custom-confirm-title" style="margin-bottom: 12px; font-size: 1.1rem; font-weight: 600;">Confirmar</h3>
+      <p id="custom-confirm-message"
+        style="margin-bottom: 24px; color: var(--text-secondary); font-size: 0.9rem; line-height: 1.5;"></p>
+      <div style="display: flex; gap: 12px; justify-content: center;">
+        <button id="custom-confirm-btn-no" class="btn" style="flex: 1; background: rgba(255,255,255,0.1);">No</button>
+        <button id="custom-confirm-btn-yes" class="btn btn-primary" style="flex: 1;">Sí</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Create Playlist Modal -->
+  <div id="create-playlist-modal" class="modal-overlay"
+    style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; align-items: center; justify-content: center; z-index: 10000; background: rgba(0,0,0,0.8);">
+    <div class="modal-content"
+      style="max-width: 350px; width: 90%; text-align: center; background: var(--bg-secondary); padding: 24px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.1);">
+      <h3 style="margin-bottom: 16px; font-size: 1.1rem; font-weight: 600;">Nueva Playlist</h3>
+      <input type="text" id="new-playlist-name" placeholder="Nombre de la playlist..."
+        style="width: 100%; padding: 10px; margin-bottom: 24px; font-size: 0.95rem; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.2); color: white;">
+      <div style="display: flex; gap: 12px; justify-content: center;">
+        <button id="btn-cancel-create-playlist" class="btn"
+          style="flex: 1; background: rgba(255,255,255,0.1);">Cancelar</button>
+        <button id="btn-confirm-create-playlist" class="btn btn-primary" style="flex: 1;">Aceptar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Video Action Picker Modal -->
+  <div id="video-action-modal" class="modal-overlay"
+    style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; align-items: center; justify-content: center; z-index: 10000; background: rgba(0,0,0,0.8);">
+    <div class="modal-content"
+      style="max-width: 350px; text-align: center; background: var(--bg-secondary); padding: 24px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.1);">
+      <h3 style="margin-bottom: 24px; font-size: 1.1rem; font-weight: 600;">¿Qué deseas hacer?</h3>
+      <div style="display: flex; flex-direction: column; gap: 12px;">
+        <button id="video-action-btn-play" class="btn btn-primary" style="padding: 12px; font-size: 0.95rem;"><i
+            class="fa-solid fa-play"></i> Reproducir ahora</button>
+        <button id="video-action-btn-queue" class="btn"
+          style="padding: 12px; background: rgba(255,255,255,0.1); font-size: 0.95rem;"><i class="fa-solid fa-plus"></i>
+          Agregar a reproducción</button>
+        <button id="video-action-btn-cancel" class="btn"
+          style="padding: 12px; background: transparent; color: var(--text-muted); font-size: 0.9rem;">Cancelar</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function customConfirm(title, message) {
+      return new Promise((resolve) => {
+        const modal = document.getElementById('custom-confirm-modal');
+        const titleEl = document.getElementById('custom-confirm-title');
+        const msgEl = document.getElementById('custom-confirm-message');
+        const btnYes = document.getElementById('custom-confirm-btn-yes');
+        const btnNo = document.getElementById('custom-confirm-btn-no');
+
+        titleEl.textContent = title;
+        msgEl.innerHTML = message.replace(/\n/g, '<br>');
+
+        modal.style.display = 'flex';
+
+        const cleanup = () => {
+          btnYes.removeEventListener('click', onYes);
+          btnNo.removeEventListener('click', onNo);
+          modal.style.display = 'none';
+        };
+
+        const onYes = () => { cleanup(); resolve(true); };
+        const onNo = () => { cleanup(); resolve(false); };
+
+        btnYes.addEventListener('click', onYes);
+        btnNo.addEventListener('click', onNo);
+      });
+    }
+
+    function promptVideoAction() {
+      return new Promise((resolve) => {
+        const modal = document.getElementById('video-action-modal');
+        const btnPlay = document.getElementById('video-action-btn-play');
+        const btnQueue = document.getElementById('video-action-btn-queue');
+        const btnCancel = document.getElementById('video-action-btn-cancel');
+
+        modal.style.display = 'flex';
+
+        const cleanup = () => {
+          btnPlay.removeEventListener('click', onPlay);
+          btnQueue.removeEventListener('click', onQueue);
+          btnCancel.removeEventListener('click', onCancel);
+          modal.style.display = 'none';
+        };
+
+        const onPlay = () => { cleanup(); resolve('play'); };
+        const onQueue = () => { cleanup(); resolve('queue'); };
+        const onCancel = () => { cleanup(); resolve(null); };
+
+        btnPlay.addEventListener('click', onPlay);
+        btnQueue.addEventListener('click', onQueue);
+        btnCancel.addEventListener('click', onCancel);
+      });
+    }
+
+    // Config and default lists
+    const PRESET_VIDEOS = {
+      'reino_infantil': [
+        { id: 'kcfEyK9mFT0', title: 'Las Mejores Canciones de La Vaca Lola', channel: 'El Reino Infantil', thumbnail: 'https://img.youtube.com/vi/kcfEyK9mFT0/hqdefault.jpg' },
+        { id: 'tem-tRq_ndU', title: 'Los Mejores Remix La Granja de Zenón Mix', channel: 'El Reino Infantil', thumbnail: 'https://img.youtube.com/vi/tem-tRq_ndU/hqdefault.jpg' },
+        { id: 'c1-zLn3f8RE', title: 'Las Mejores Canciones de La Vaca Lola', channel: 'El Reino Infantil', thumbnail: 'https://img.youtube.com/vi/c1-zLn3f8RE/hqdefault.jpg' },
+        { id: 'wS1LPVjVfxk', title: 'Las 35 Mejores Canciones de La Granja de Zenón', channel: 'El Reino Infantil', thumbnail: 'https://img.youtube.com/vi/wS1LPVjVfxk/hqdefault.jpg' },
+        { id: '9svA9dzh6Xc', title: 'El Buey y la Vaca Trabajan Juntos', channel: 'El Reino Infantil', thumbnail: 'https://img.youtube.com/vi/9svA9dzh6Xc/hqdefault.jpg' },
+        { id: 'cYPTR3HfwZQ', title: 'Los Pollitos Dicen Pío Pío Pío', channel: 'El Reino Infantil', thumbnail: 'https://img.youtube.com/vi/cYPTR3HfwZQ/hqdefault.jpg' },
+        { id: 'BLAfJHTgpH4', title: 'La Patita Lulú', channel: 'El Reino Infantil', thumbnail: 'https://img.youtube.com/vi/BLAfJHTgpH4/hqdefault.jpg' },
+        { id: 't0M91VFFTAw', title: 'Con la A A A - Bichikids', channel: 'El Reino Infantil', thumbnail: 'https://img.youtube.com/vi/t0M91VFFTAw/hqdefault.jpg' },
+        { id: 'l7XHvP_cRD4', title: 'El Pavo y La Pava se van a casar', channel: 'El Reino Infantil', thumbnail: 'https://img.youtube.com/vi/l7XHvP_cRD4/hqdefault.jpg' },
+        { id: 'HrsFUbVE9YQ', title: 'Pajaritos a Bailar', channel: 'El Reino Infantil', thumbnail: 'https://img.youtube.com/vi/HrsFUbVE9YQ/hqdefault.jpg' }
+      ],
+
+      'super_simple': [
+        { id: 'qDUfm2_beKE', title: 'Estrellita ¿Dónde Estás?', channel: 'Super Simple Español', thumbnail: 'https://img.youtube.com/vi/qDUfm2_beKE/hqdefault.jpg' },
+        { id: '3AeQKjQbZMg', title: 'Adiós, Adiós y Más Canciones de Rutinas Diarias', channel: 'Super Simple Español', thumbnail: 'https://img.youtube.com/vi/3AeQKjQbZMg/hqdefault.jpg' },
+        { id: 'lUe2TzWmCuM', title: 'Estrellita ¿Dónde Estás? y Más Canciones Infantiles', channel: 'Super Simple Español', thumbnail: 'https://img.youtube.com/vi/lUe2TzWmCuM/hqdefault.jpg' },
+        { id: 'psGm3T2-rS8', title: '¡Hola! y Más Canciones Infantiles', channel: 'Super Simple Español', thumbnail: 'https://img.youtube.com/vi/psGm3T2-rS8/hqdefault.jpg' },
+        { id: '84a0NFDxR0s', title: 'Adiós, Adiós y Más Canciones Infantiles', channel: 'Super Simple Español', thumbnail: 'https://img.youtube.com/vi/84a0NFDxR0s/hqdefault.jpg' },
+        { id: 'ka_gsvn4RLk', title: '¿Qué Quieren Para Navidad? y Más', channel: 'Super Simple Español', thumbnail: 'https://img.youtube.com/vi/ka_gsvn4RLk/hqdefault.jpg' },
+        { id: 'cWhGqN1vxRM', title: 'Soy Una Araña Grande y Más', channel: 'Super Simple Español', thumbnail: 'https://img.youtube.com/vi/cWhGqN1vxRM/hqdefault.jpg' },
+        { id: 'HtwCZowcGuw', title: 'Bebé Tiburón', channel: 'Super Simple Español', thumbnail: 'https://img.youtube.com/vi/HtwCZowcGuw/hqdefault.jpg' },
+        { id: 'lkwJvOk_De8', title: 'Doy Gracias y Más Canciones Infantiles', channel: 'Super Simple Español', thumbnail: 'https://img.youtube.com/vi/lkwJvOk_De8/hqdefault.jpg' },
+        { id: '5FeY4DEgrGo', title: 'Un Pequeño Dedo', channel: 'Super Simple Español', thumbnail: 'https://img.youtube.com/vi/5FeY4DEgrGo/hqdefault.jpg' },
+        { id: 'UUghFfTXFgk', title: 'La Canción del Baño y Más Música Infantil', channel: 'Super Simple Español', thumbnail: 'https://img.youtube.com/vi/UUghFfTXFgk/hqdefault.jpg' }
+      ],
+
+      'babybus': [
+        { id: 'wa_z8i8NBng', title: '¡Es Mío! ¡Es Mío!', channel: 'BabyBus en Español', thumbnail: 'https://img.youtube.com/vi/wa_z8i8NBng/hqdefault.jpg' },
+        { id: 'IqOH_jmCU3M', title: 'Helado de Arco Iris', channel: 'BabyBus en Español', thumbnail: 'https://img.youtube.com/vi/IqOH_jmCU3M/hqdefault.jpg' },
+        { id: 'e2NKLR79WqY', title: 'La Motocicleta Scoopy', channel: 'BabyBus en Español', thumbnail: 'https://img.youtube.com/vi/e2NKLR79WqY/hqdefault.jpg' },
+        { id: 'tXFrdV3ca0U', title: 'Kiki y Miumiu', channel: 'BabyBus en Español', thumbnail: 'https://img.youtube.com/vi/tXFrdV3ca0U/hqdefault.jpg' },
+        { id: '4TeX7r3YPa0', title: 'El Tren del ABC Choo Choo', channel: 'BabyBus en Español', thumbnail: 'https://img.youtube.com/vi/4TeX7r3YPa0/hqdefault.jpg' },
+        { id: '_AXqwdKiMrU', title: 'Doctora de Juguetes Mimi', channel: 'BabyBus en Español', thumbnail: 'https://img.youtube.com/vi/_AXqwdKiMrU/hqdefault.jpg' },
+        { id: 'i1FFaKf0lvU', title: 'Transformación a Camiones de Construcción', channel: 'BabyBus en Español', thumbnail: 'https://img.youtube.com/vi/i1FFaKf0lvU/hqdefault.jpg' },
+        { id: 'MV_Vz4dZgUM', title: '¿Cuál es Kiki Verdadero?', channel: 'BabyBus en Español', thumbnail: 'https://img.youtube.com/vi/MV_Vz4dZgUM/hqdefault.jpg' },
+        { id: 'lb0GeF5uzF0', title: 'Sheriff Labrador - Submarine Train', channel: 'BabyBus en Español', thumbnail: 'https://img.youtube.com/vi/lb0GeF5uzF0/hqdefault.jpg' },
+        { id: '-vtr2VS97J8', title: 'Ciudad Soñada del Panda Bebé', channel: 'BabyBus en Español', thumbnail: 'https://img.youtube.com/vi/-vtr2VS97J8/hqdefault.jpg' }
+      ],
+
+      'babytv': [
+        { id: 'dvB9RE68R6c', title: 'Hora de Juego | Colores y Botes', channel: 'BabyTV Español', thumbnail: 'https://img.youtube.com/vi/dvB9RE68R6c/hqdefault.jpg' },
+        { id: '42qhBM5sAcs', title: 'La Aventura de Aprendizaje de Charlie', channel: 'BabyTV Español', thumbnail: 'https://img.youtube.com/vi/42qhBM5sAcs/hqdefault.jpg' },
+        { id: 'ymIjH_VAWJQ', title: 'Canciones Divertidas para Aprender con Charlie', channel: 'BabyTV Español', thumbnail: 'https://img.youtube.com/vi/ymIjH_VAWJQ/hqdefault.jpg' },
+        { id: '8OVHYl3xoqI', title: 'Charlie Conoce al Número Tres', channel: 'BabyTV Español', thumbnail: 'https://img.youtube.com/vi/8OVHYl3xoqI/hqdefault.jpg' },
+        { id: '3pX8Jkspdds', title: 'Charlie Conoce los Números 4, 5 y 6', channel: 'BabyTV Español', thumbnail: 'https://img.youtube.com/vi/3pX8Jkspdds/hqdefault.jpg' },
+        { id: 'IHgp19uixQM', title: 'Número Cinco y el Globo', channel: 'BabyTV Español', thumbnail: 'https://img.youtube.com/vi/IHgp19uixQM/hqdefault.jpg' },
+        { id: '3tVLkrVhPig', title: 'Amigos del Subibaja', channel: 'BabyTV Español', thumbnail: 'https://img.youtube.com/vi/3tVLkrVhPig/hqdefault.jpg' },
+        { id: 'hHHDe9KgW6I', title: 'Lo Mejor de BabyTV', channel: 'BabyTV Español', thumbnail: 'https://img.youtube.com/vi/hHHDe9KgW6I/hqdefault.jpg' },
+        { id: '3TfEg-r4IOI', title: 'Lo Mejor de BabyTV - Compilación de 3 Horas', channel: 'BabyTV Español', thumbnail: 'https://img.youtube.com/vi/3TfEg-r4IOI/hqdefault.jpg' },
+        { id: 'lg4AOiFEDLA', title: 'Charlie y el Número Uno', channel: 'BabyTV Español', thumbnail: 'https://img.youtube.com/vi/lg4AOiFEDLA/hqdefault.jpg' }
+      ],
+      'baby_einstein_classics': [
+        { id: 'nYlU-G-ghec', title: 'Exploring The World of Colors', channel: 'Baby Einstein Classics', thumbnail: 'https://img.youtube.com/vi/nYlU-G-ghec/hqdefault.jpg' },
+        { id: '_HbEejSqE9Y', title: 'Baby Mozart Music Festival', channel: 'Baby Einstein Classics', thumbnail: 'https://img.youtube.com/vi/_HbEejSqE9Y/hqdefault.jpg' },
+        { id: 'l02JKHyrgh8', title: 'Baby Bach, Mozart & Beethoven Compilation', channel: 'Baby Einstein Classics', thumbnail: 'https://img.youtube.com/vi/l02JKHyrgh8/hqdefault.jpg' },
+        { id: 'CH184Higw7Q', title: 'Numbers Nursery', channel: 'Baby Einstein Classics', thumbnail: 'https://img.youtube.com/vi/CH184Higw7Q/hqdefault.jpg' },
+        { id: 'SdlzI346moc', title: 'Baby Mozart', channel: 'Baby Einstein Classics', thumbnail: 'https://img.youtube.com/vi/SdlzI346moc/hqdefault.jpg' },
+        { id: 'TtAflAsJ_Js', title: 'Baby Newton', channel: 'Baby Einstein Classics', thumbnail: 'https://img.youtube.com/vi/TtAflAsJ_Js/hqdefault.jpg' },
+        { id: 'snmiUCgil9s', title: 'World Animals', channel: 'Baby Einstein Classics', thumbnail: 'https://img.youtube.com/vi/snmiUCgil9s/hqdefault.jpg' },
+        { id: 'PSWozU-DLLQ', title: 'Baby Neptune + More Baby Einstein Classics', channel: 'Baby Einstein Classics', thumbnail: 'https://img.youtube.com/vi/PSWozU-DLLQ/hqdefault.jpg' },
+        { id: 'Qg9ZbxSW7wA', title: 'Neighborhood Animals + More Baby Einstein Classics', channel: 'Baby Einstein Classics', thumbnail: 'https://img.youtube.com/vi/Qg9ZbxSW7wA/hqdefault.jpg' },
+        { id: '6mcNGa9givU', title: 'Discovering Shapes + More Baby Einstein Classics', channel: 'Baby Einstein Classics', thumbnail: 'https://img.youtube.com/vi/6mcNGa9givU/hqdefault.jpg' }
+      ]
+    };
+
+    const PRESETS = [
+      { id: 'reino_infantil', name: 'El Reino Infantil', icon: 'fa-cow' },
+      { id: 'super_simple', name: 'Super Simple', icon: 'fa-star' },
+      { id: 'babybus', name: 'BabyBus', icon: 'fa-bus' },
+      { id: 'babytv', name: 'Baby TV', icon: 'fa-tv' },
+      { id: 'baby_einstein_classics', name: 'Baby Einstein', icon: 'fa-tv' }
+    ];
+    // API endpoint — same folder on your hosting
+    const API_URL = 'api.php';
+
+    // Unified AJAX helper
+    async function apiCall(action, data = {}) {
+      const res = await fetch(`${API_URL}?action=${action}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, ...data })
+      });
+      return res.json();
+    }
+
+    // State Variables
+    let currentPlaylist = 'reino_infantil';
+    let customPlaylists = {}; // Loaded from MySQL on init
+    let activeQueue = JSON.parse(localStorage.getItem('yt_active_queue')) || [];
+    let currentQueueIndex = parseInt(localStorage.getItem('yt_queue_index')) || -1;
+    let isPlaying = false;
+    let isRepeating = localStorage.getItem('yt_repeat_mode') === 'true';
+    let playerConnected = false;
+    let heartbeatTimeout;
+
+    // Tracks the currently loaded video for server-side state sync
+    let currentVideoState = { id: '', title: '', thumbnail: '' };
+
+    // Remote channel communication
+    let channel = new BroadcastChannel('youtube_remote_control');
+
+    // Invidious API instance list for YouTube Search
+    const INVIDIOUS_INSTANCES = [
+      'https://invidious.projectsegfau.lt',
+      'https://vid.puffyan.us',
+      'https://invidious.flokinet.to',
+      'https://yewtu.be',
+      'https://iv.ggtyler.dev'
+    ];
+
+    // UI Nodes
+    const presetPlaylistsContainer = document.getElementById('preset-playlists');
+    const customPlaylistsContainer = document.getElementById('custom-playlists');
+    const videoResultsContainer = document.getElementById('video-results');
+    const resultsHeading = document.getElementById('results-heading');
+    const relatedSection = document.getElementById('related-section');
+    const relatedResultsContainer = document.getElementById('related-results');
+    const relatedHeading = document.getElementById('related-heading');
+    const searchInput = document.getElementById('search-input');
+    const btnSearch = document.getElementById('btn-search');
+    const queueListContainer = document.getElementById('queue-list-container');
+    const btnSaveQueue = document.getElementById('btn-save-queue');
+
+    const playerStatusBadge = document.getElementById('player-status');
+    const playerStatusText = document.getElementById('player-status-text');
+    const activeThumb = document.getElementById('active-thumb');
+    const activeTitle = document.getElementById('active-title');
+    const activeChannel = document.getElementById('active-channel');
+
+    const btnPlayPause = document.getElementById('btn-play-pause');
+    const btnPrev = document.getElementById('btn-prev');
+    const btnNext = document.getElementById('btn-next');
+    const btnToggleRepeat = document.getElementById('btn-toggle-repeat');
+    const btnClearQueue = document.getElementById('btn-clear-queue');
+    const progressSlider = document.getElementById('progress-slider');
+    const volumeSlider = document.getElementById('volume-slider');
+    const volumeIcon = document.getElementById('volume-icon');
+    const timeCurrent = document.getElementById('time-current');
+    const timeDuration = document.getElementById('time-duration');
+    const btnOpenPlayer = document.getElementById('btn-open-player');
+    const btnQuickAdd = document.getElementById('btn-quick-add');
+
+    // Dialog Modal Nodes
+    const urlModal = document.getElementById('url-modal');
+    const directUrlInput = document.getElementById('direct-url-input');
+    const btnCancelModal = document.getElementById('btn-cancel-modal');
+    const btnSubmitModal = document.getElementById('btn-submit-modal');
+
+    // Create Custom Playlist input
+    const newPlaylistNameInput = document.getElementById('new-playlist-name');
+    const btnCreatePlaylist = document.getElementById('btn-create-playlist');
+
+    // Initialize Page
+    window.addEventListener('DOMContentLoaded', async () => {
+      renderPresets();
+
+      // Load custom playlists from MySQL
+      try {
+        const result = await fetch(`${API_URL}?action=get_playlists`);
+        const data = await result.json();
+        if (data.success) {
+          customPlaylists = data.playlists;
+        }
+      } catch (e) {
+        console.warn('Could not load playlists from server, using empty state.', e);
+      }
+
+      renderCustomPlaylists();
+      loadPlaylist(currentPlaylist);
+      renderQueue();
+      setupBroadcastChannel();
+      startRemoteStatusPolling();
+      setupEventListeners();
+
+      // Initial check for player
+      sendCommand('PING');
+
+      // Update repeat button class state
+      if (isRepeating) {
+        btnToggleRepeat.classList.add('btn-primary');
+      }
+
+      // Load related videos for the currently playing video (if any)
+      try {
+        const stateRes = await fetch(`${API_URL}?action=get_state`, { cache: 'no-store' });
+        const stateData = await stateRes.json();
+        if (stateData.success && stateData.state && stateData.state.video_id) {
+          console.log('[Related] Init: found active video:', stateData.state.video_id, stateData.state.title);
+          fetchRelatedVideos(stateData.state.video_id, stateData.state.title);
+        }
+      } catch (e) {
+        console.warn('[Related] Init: could not fetch server state', e);
+      }
+    });
+
+    // Unified command sending helper (BroadcastChannel + localStorage + server sync)
+    function sendCommand(type, payload = {}) {
+      if (channel) {
+        try {
+          channel.postMessage({ type, payload });
+        } catch (e) {
+          console.warn('BroadcastChannel postMessage failed:', e);
+        }
+      }
+      localStorage.setItem('yt_remote_command', JSON.stringify({
+        type: type,
+        payload: payload,
+        _timestamp: Date.now()
+      }));
+
+      // Push state to server so remote players can sync
+      // Skip read-only / internal commands
+      if (type === 'PING' || type === 'STATUS_UPDATE') return;
+
+      if (type === 'LOAD_VIDEO') {
+        currentVideoState = {
+          id: payload.id || '',
+          title: payload.title || '',
+          thumbnail: payload.thumbnail || ''
+        };
+      }
+
+      const commandId = Date.now();
+      fetch(`${API_URL}?action=set_state`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          command: type,
+          video_id: currentVideoState.id,
+          title: currentVideoState.title,
+          thumbnail: currentVideoState.thumbnail,
+          seek_pct: type === 'SEEK' ? (payload.percent || 0) : 0,
+          volume: type === 'SET_VOLUME' ? (payload.volume || 50) : parseInt(volumeSlider.value),
+          command_id: commandId
+        })
+      }).catch(() => { }); // fire-and-forget, don't block UI
+    }
+
+    // Guard to prevent playNext() from firing multiple times for the same ended video
+    let lastEndedVideoId = null;
+
+    function handlePlayerStatusUpdate(payload, state, duration, currentTime, volume) {
+      markPlayerConnected();
+
+      // Update Now Playing UI state
+      if (payload.video && payload.video.id) {
+        activeTitle.textContent = payload.video.title;
+        activeThumb.src = payload.video.thumbnail;
+
+        // Fetch related videos when a new video is detected
+        fetchRelatedVideos(payload.video.id, payload.video.title);
+
+        // Sync with current queue index if needed
+        const qIdx = activeQueue.findIndex(v => v.id === payload.video.id);
+        if (qIdx !== -1 && qIdx !== currentQueueIndex) {
+          currentQueueIndex = qIdx;
+          localStorage.setItem('yt_queue_index', currentQueueIndex);
+          updateQueueActiveState();
+        }
+      }
+
+      // Playback State: YT.PlayerState.PLAYING = 1, PAUSED = 2, ENDED = 0
+      if (state === 1) {
+        isPlaying = true;
+        btnPlayPause.innerHTML = '<i class="fa-solid fa-pause"></i>';
+        // Reset ended guard when a new video starts playing
+        lastEndedVideoId = null;
+      } else if (state === 0) {
+        // ENDED — auto-advance to next video in queue
+        isPlaying = false;
+        btnPlayPause.innerHTML = '<i class="fa-solid fa-play"></i>';
+        const endedId = payload.video ? payload.video.id : null;
+        if (endedId && endedId !== lastEndedVideoId) {
+          lastEndedVideoId = endedId;
+          console.log('[AutoNext] Video ended, advancing to next in queue:', endedId);
+          playNext();
+        }
+      } else {
+        isPlaying = false;
+        btnPlayPause.innerHTML = '<i class="fa-solid fa-play"></i>';
+      }
+
+      // Timeline Sync
+      if (duration > 0) {
+        const currentPct = (currentTime / duration) * 100;
+        // Only update slider if user is not actively dragging it
+        if (document.activeElement !== progressSlider) {
+          progressSlider.value = currentPct;
+        }
+        timeCurrent.textContent = formatTime(currentTime);
+        timeDuration.textContent = formatTime(duration);
+      }
+
+      // Volume Sync
+      if (document.activeElement !== volumeSlider) {
+        volumeSlider.value = volume;
+        updateVolumeIcon(volume);
+      }
+    }
+
+    // Setup bidirectional communication
+    function setupBroadcastChannel() {
+      // 1. BroadcastChannel setup
+      try {
+        channel = new BroadcastChannel('youtube_remote_control');
+        channel.onmessage = function (event) {
+          const { type, payload } = event.data;
+
+          if (type === 'STATUS_UPDATE') {
+            handlePlayerStatusUpdate(
+              payload,
+              payload.state,
+              payload.duration,
+              payload.currentTime,
+              payload.volume
+            );
+          }
+
+          if (type === 'VIDEO_ENDED') {
+            playNext();
+          }
+
+          if (type === 'ERROR') {
+            console.error('Player reported error code: ', payload.errorCode);
+            setTimeout(playNext, 2000);
+          }
+        };
+      } catch (e) {
+        console.warn('BroadcastChannel not supported or blocked in index.html, using localStorage.');
+      }
+
+      // 2. Storage event fallback (for file:// protocol)
+      window.addEventListener('storage', (event) => {
+        if (event.key === 'yt_remote_status' && event.newValue) {
+          try {
+            const status = JSON.parse(event.newValue);
+            handlePlayerStatusUpdate(
+              status,
+              status.state,
+              status.duration,
+              status.currentTime,
+              status.volume
+            );
+          } catch (err) {
+            console.error('Error parsing localStorage status update:', err);
+          }
+        }
+      });
+    }
+
+    // ── Remote Player State Polling (Multi-Device) ──
+    function startRemoteStatusPolling() {
+      setInterval(async () => {
+        try {
+          // Add cache-buster to prevent aggressive browser caching on iOS
+          const cacheBuster = Date.now();
+          const res = await fetch(`${API_URL}?action=get_state&_cb=${cacheBuster}`, { cache: 'no-store' });
+          const data = await res.json();
+          
+          const dbg = document.getElementById('debug-ping');
+          if (dbg) {
+            dbg.textContent = data.state ? `[ping: ${data.state.ping_age}s]` : '[ping: N/A]';
+          }
+
+          // If the player sent a status update to the server in the last 15 seconds, it's alive
+          // (Increased tolerance to 15s because iOS might throttle setInterval)
+          if (data.success && data.state && data.state.ping_age !== null && data.state.ping_age < 15) {
+            if (data.state.status_json) {
+              const status = JSON.parse(data.state.status_json);
+              handlePlayerStatusUpdate(status, status.state, status.duration, status.currentTime, status.volume);
+            }
+          }
+        } catch (e) {
+          // ignore network blips
+        }
+      }, 1500);
+    }
+
+    function markPlayerConnected() {
+      playerConnected = true;
+      playerStatusBadge.className = 'player-status-badge status-connected';
+      playerStatusText.textContent = 'Conectado';
+
+      if (heartbeatTimeout) clearTimeout(heartbeatTimeout);
+      // If we don't hear from player in 3.5 seconds, mark as disconnected
+      heartbeatTimeout = setTimeout(() => {
+        playerConnected = false;
+        playerStatusBadge.className = 'player-status-badge status-disconnected';
+        playerStatusText.textContent = 'Desconectado';
+      }, 3500);
+    }
+
+    // Event Setup
+    function setupEventListeners() {
+      // Open Player Page in New Tab
+      btnOpenPlayer.addEventListener('click', () => {
+        window.open('player.html', '_blank');
+      });
+
+      // Play / Pause Action
+      btnPlayPause.addEventListener('click', () => {
+        if (!playerConnected) {
+          alert('¡El visor de pantalla completa no está conectado! Abre el visor primero.');
+          return;
+        }
+        if (isPlaying) {
+          sendCommand('PAUSE');
+        } else {
+          // If queue has videos but nothing is active, load first
+          if (currentQueueIndex === -1 && activeQueue.length > 0) {
+            playVideoIndex(0);
+          } else {
+            sendCommand('PLAY');
+          }
+        }
+      });
+
+      // Next / Prev Action
+      btnNext.addEventListener('click', playNext);
+      btnPrev.addEventListener('click', playPrev);
+
+      // Timeline seeking
+      progressSlider.addEventListener('input', () => {
+        if (!playerConnected) return;
+        sendCommand('SEEK', { percent: parseFloat(progressSlider.value) });
+      });
+
+      // Volume Controls
+      volumeSlider.addEventListener('input', () => {
+        const val = parseInt(volumeSlider.value);
+        updateVolumeIcon(val);
+        sendCommand('SET_VOLUME', { volume: val });
+      });
+
+      // Mute Toggle on icon click
+      volumeIcon.addEventListener('click', () => {
+        const val = volumeSlider.value > 0 ? 0 : 50;
+        volumeSlider.value = val;
+        updateVolumeIcon(val);
+        sendCommand('SET_VOLUME', { volume: val });
+      });
+
+      // Search Action
+      btnSearch.addEventListener('click', performSearch);
+      searchInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') performSearch();
+      });
+
+      // Clear Queue
+      btnClearQueue.addEventListener('click', () => {
+        activeQueue = [];
+        currentQueueIndex = -1;
+        saveQueue();
+        renderQueue();
+      });
+
+      // Toggle Repeat Mode
+      btnToggleRepeat.addEventListener('click', () => {
+        isRepeating = !isRepeating;
+        localStorage.setItem('yt_repeat_mode', isRepeating);
+        if (isRepeating) {
+          btnToggleRepeat.classList.add('btn-primary');
+        } else {
+          btnToggleRepeat.classList.remove('btn-primary');
+        }
+      });
+
+      // Custom Playlist Creation
+      const createPlaylistModal = document.getElementById('create-playlist-modal');
+      const btnCancelCreatePlaylist = document.getElementById('btn-cancel-create-playlist');
+      const btnConfirmCreatePlaylist = document.getElementById('btn-confirm-create-playlist');
+
+      btnCreatePlaylist.addEventListener('click', () => {
+        newPlaylistNameInput.value = '';
+        createPlaylistModal.style.display = 'flex';
+        newPlaylistNameInput.focus();
+      });
+
+      btnCancelCreatePlaylist.addEventListener('click', () => {
+        createPlaylistModal.style.display = 'none';
+      });
+
+      btnConfirmCreatePlaylist.addEventListener('click', async () => {
+        const name = newPlaylistNameInput.value.trim();
+        if (!name) return;
+        if (customPlaylists[name]) {
+          alert('Ya existe una playlist con ese nombre.');
+          return;
+        }
+        try {
+          const result = await apiCall('create_playlist', { name });
+          if (result.error) { alert(result.error); return; }
+          customPlaylists[name] = [];
+          renderCustomPlaylists();
+          createPlaylistModal.style.display = 'none';
+        } catch (e) {
+          alert('Error al crear la playlist. Revisa la conexión con el servidor.');
+        }
+      });
+
+      // Save Queue to Playlist logic
+      const saveQueueModal = document.getElementById('save-queue-modal');
+      const sqSelectPlaylist = document.getElementById('sq-select-playlist');
+      const sqNewPlaylist = document.getElementById('sq-new-playlist');
+      const sqBtnCancel = document.getElementById('sq-btn-cancel');
+      const sqBtnSave = document.getElementById('sq-btn-save');
+
+      btnSaveQueue.addEventListener('click', () => {
+        if (activeQueue.length === 0) {
+          alert("La cola de reproducción está vacía.");
+          return;
+        }
+        
+        const keys = Object.keys(customPlaylists);
+        sqSelectPlaylist.innerHTML = '<option value="">-- Crear nueva playlist abajo --</option>' + 
+          keys.map(k => `<option value="${k}">${k}</option>`).join('');
+        
+        sqNewPlaylist.value = '';
+        saveQueueModal.style.display = 'flex';
+      });
+
+      sqBtnCancel.addEventListener('click', () => {
+        saveQueueModal.style.display = 'none';
+      });
+
+      sqBtnSave.addEventListener('click', async () => {
+        const selected = sqSelectPlaylist.value;
+        const newName = sqNewPlaylist.value.trim();
+        let targetPlaylist = '';
+        
+        if (newName) {
+          if (customPlaylists[newName]) {
+            alert('Ya existe una playlist con ese nombre.');
+            return;
+          }
+          try {
+            const result = await apiCall('create_playlist', { name: newName });
+            if (result.error) { alert(result.error); return; }
+            customPlaylists[newName] = [];
+            renderCustomPlaylists();
+            targetPlaylist = newName;
+          } catch (e) {
+            alert('Error al crear la playlist.');
+            return;
+          }
+        } else if (selected) {
+          targetPlaylist = selected;
+        } else {
+          alert('Selecciona una playlist o escribe un nombre para crear una nueva.');
+          return;
+        }
+        
+        sqBtnSave.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Guardando...';
+        sqBtnSave.disabled = true;
+
+        let addedCount = 0;
+        for (const video of activeQueue) {
+          const already = customPlaylists[targetPlaylist].some(v => v.id === video.id);
+          if (!already) {
+            try {
+              await apiCall('add_video', {
+                playlist: targetPlaylist,
+                video_id: video.id,
+                title: video.title,
+                channel: video.channel || '',
+                thumbnail: video.thumbnail
+              });
+              customPlaylists[targetPlaylist].push({
+                id: video.id,
+                title: video.title,
+                channel: video.channel,
+                thumbnail: video.thumbnail
+              });
+              addedCount++;
+            } catch (err) {
+              console.warn('Error saving video to playlist', video.title);
+            }
+          }
+        }
+        
+        sqBtnSave.innerHTML = 'Guardar Cola';
+        sqBtnSave.disabled = false;
+        saveQueueModal.style.display = 'none';
+        
+        if (currentPlaylist === targetPlaylist) {
+          loadPlaylist(currentPlaylist);
+        }
+        
+        showToast(`✓ Se guardaron ${addedCount} videos en "${targetPlaylist}"`);
+      });
+
+      // Modal management
+      if (btnQuickAdd) {
+        btnQuickAdd.addEventListener('click', () => {
+          urlModal.style.display = 'flex';
+          directUrlInput.focus();
+        });
+      }
+      btnCancelModal.addEventListener('click', () => {
+        urlModal.style.display = 'none';
+        directUrlInput.value = '';
+      });
+      btnSubmitModal.addEventListener('click', submitDirectUrl);
+      directUrlInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') submitDirectUrl();
+      });
+    }
+
+    // Render preset category sidebar items
+    function renderPresets() {
+      presetPlaylistsContainer.innerHTML = PRESETS.map(p => `
+        <li class="playlist-item ${currentPlaylist === p.id ? 'active' : ''}" data-id="${p.id}">
+          <i class="fa-solid ${p.icon}"></i>
+          <span>${p.name}</span>
+        </li>
+      `).join('');
+
+      presetPlaylistsContainer.querySelectorAll('.playlist-item').forEach(el => {
+        el.addEventListener('click', () => {
+          document.querySelectorAll('.playlist-item').forEach(x => x.classList.remove('active'));
+          el.classList.add('active');
+          currentPlaylist = el.dataset.id;
+          loadPlaylist(currentPlaylist);
+          promptReplaceQueue(currentPlaylist);
+        });
+      });
+    }
+
+    // Render custom playlist list
+    function renderCustomPlaylists() {
+      const keys = Object.keys(customPlaylists);
+      if (keys.length === 0) {
+        customPlaylistsContainer.innerHTML = `<li style="font-size: 0.8rem; color: var(--text-muted); padding: 8px 16px; text-align: center;">Ninguna playlist creada</li>`;
+        return;
+      }
+
+      customPlaylistsContainer.innerHTML = keys.map(k => `
+        <li class="playlist-item custom-item ${currentPlaylist === k ? 'active' : ''}" data-id="${k}">
+          <div style="display: flex; align-items: center; gap: 12px; min-width: 0;">
+            <i class="fa-solid fa-list" style="color: var(--accent);"></i>
+            <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${k}</span>
+          </div>
+          <button class="delete-btn" data-delete="${k}"><i class="fa-solid fa-xmark"></i></button>
+        </li>
+      `).join('');
+
+      customPlaylistsContainer.querySelectorAll('.playlist-item').forEach(el => {
+        el.addEventListener('click', async (e) => {
+          if (e.target.closest('.delete-btn')) {
+            const playlistName = e.target.closest('.delete-btn').dataset.delete;
+            if (await customConfirm('Confirmar Eliminación', `¿Eliminar playlist "${playlistName}"?`)) {
+              try {
+                await apiCall('delete_playlist', { name: playlistName });
+              } catch (err) { console.warn('API delete failed, removing locally.'); }
+              delete customPlaylists[playlistName];
+              renderCustomPlaylists();
+              if (currentPlaylist === playlistName) {
+                currentPlaylist = 'reino_infantil';
+                renderPresets();
+                loadPlaylist(currentPlaylist);
+              }
+            }
+            return;
+          }
+          document.querySelectorAll('.playlist-item').forEach(x => x.classList.remove('active'));
+          el.classList.add('active');
+          currentPlaylist = el.dataset.id;
+          loadPlaylist(currentPlaylist);
+          promptReplaceQueue(currentPlaylist);
+        });
+      });
+    }
+
+    // Load category videos
+    function loadPlaylist(id) {
+      let videos = [];
+      if (PRESET_VIDEOS[id]) {
+        videos = PRESET_VIDEOS[id];
+        resultsHeading.textContent = `Sugerencias: ${PRESETS.find(p => p.id === id).name}`;
+      } else if (customPlaylists[id]) {
+        videos = customPlaylists[id];
+        resultsHeading.textContent = `Mi Playlist: ${id}`;
+      }
+
+      renderVideoGrid(videos);
+    }
+
+    async function promptReplaceQueue(playlistId) {
+      let videos = PRESET_VIDEOS[playlistId] || customPlaylists[playlistId] || [];
+      if (videos.length === 0) return;
+
+      if (await customConfirm('Sustituir Cola', '¿Quieres sustituir la cola de reproducción actual por esta lista completa?')) {
+        activeQueue = videos.map(v => ({ ...v, uuid: Math.random().toString(36).substring(2, 9) }));
+        saveQueue();
+        renderQueue();
+        playVideoIndex(0);
+      }
+    }
+
+    // Render video results grid
+    function renderVideoGrid(videos) {
+      if (videos.length === 0) {
+        videoResultsContainer.innerHTML = `
+          <div style="grid-column: 1/-1; text-align: center; padding: 40px; color: var(--text-secondary);">
+            <i class="fa-solid fa-folder-open" style="font-size: 2.5rem; color: var(--text-muted); margin-bottom: 12px;"></i>
+            <p>Esta lista está vacía. Busca videos e incorpóralos.</p>
+          </div>
+        `;
+        return;
+      }
+
+      videoResultsContainer.innerHTML = videos.map((v, index) => `
+        <div class="video-card" data-id="${v.id}" data-index="${index}">
+          <div class="video-thumbnail-container">
+            <img class="video-thumbnail" src="${v.thumbnail}" alt="Thumbnail">
+            <span class="video-duration">Ver en TV</span>
+          </div>
+          <div class="video-info">
+            <h4 class="video-title">${v.title}</h4>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: auto;">
+              <span class="video-channel">${v.channel}</span>
+              <div style="display: flex; gap: 4px;">
+                <button class="btn btn-save-playlist" title="Guardar en playlist" style="padding: 6px 8px; font-size: 0.75rem;"><i class="fa-solid fa-folder-plus"></i></button>
+                <button class="btn btn-primary btn-play-now" title="Reproducir ahora" style="padding: 6px 8px; font-size: 0.75rem;"><i class="fa-solid fa-play"></i></button>
+              </div>
+            </div>
+          </div>
+        </div>
+      `).join('');
+
+      // Add actions to cards
+      videoResultsContainer.querySelectorAll('.video-card').forEach(card => {
+        const idx = card.dataset.index;
+        const video = videos[idx];
+
+        card.querySelector('.btn-save-playlist').addEventListener('click', (e) => {
+          e.stopPropagation();
+          openPlaylistPicker(video);
+        });
+
+        const handleCardAction = async (e) => {
+          e.stopPropagation();
+          const action = await promptVideoAction();
+          if (action === 'play') {
+            playVideoNow(video);
+          } else if (action === 'queue') {
+            addToQueue(video);
+          }
+        };
+
+        card.querySelector('.btn-play-now').addEventListener('click', handleCardAction);
+
+        // Clicking card body also plays video now
+        card.addEventListener('click', handleCardAction);
+      });
+    }
+
+    // Queue actions
+    function addToQueue(video) {
+      // Avoid duplicate exact objects side-by-side or customize
+      activeQueue.push({ ...video, uuid: Math.random().toString(36).substring(2, 9) });
+      saveQueue();
+      renderQueue();
+    }
+
+    function playVideoNow(video) {
+      // Add to queue right after current, or add to end and play
+      const newVideo = { ...video, uuid: Math.random().toString(36).substring(2, 9) };
+
+      if (currentQueueIndex === -1) {
+        activeQueue.push(newVideo);
+        currentQueueIndex = activeQueue.length - 1;
+      } else {
+        // Insert right after current active
+        activeQueue.splice(currentQueueIndex + 1, 0, newVideo);
+        currentQueueIndex++;
+      }
+
+      saveQueue();
+      renderQueue();
+      playVideoIndex(currentQueueIndex);
+    }
+
+    async function playVideoIndex(index) {
+      if (index < 0 || index >= activeQueue.length) return;
+      currentQueueIndex = index;
+      localStorage.setItem('yt_queue_index', currentQueueIndex);
+
+      const video = activeQueue[index];
+
+      if (!playerConnected && !sessionStorage.getItem('player_prompt_dismissed')) {
+        const wantsToOpen = await customConfirm('Abrir Reproductor', '¿Deseas abrir el reproductor de video en este dispositivo?\n\n(Selecciona "No" si el reproductor ya está abierto en otra pantalla)');
+        if (wantsToOpen) {
+          window.open('player.html', '_blank');
+        }
+        sessionStorage.setItem('player_prompt_dismissed', 'true');
+      }
+
+      fetchRelatedVideos(video.id, video.title);
+
+      sendCommand('LOAD_VIDEO', {
+        id: video.id,
+        title: video.title,
+        thumbnail: video.thumbnail
+      });
+
+      updateQueueActiveState();
+    }
+
+    function playNext() {
+      if (activeQueue.length === 0) return;
+      let nextIndex = currentQueueIndex + 1;
+      if (nextIndex >= activeQueue.length) {
+        if (isRepeating) {
+          nextIndex = 0;
+        } else {
+          // End of queue
+          return;
+        }
+      }
+      playVideoIndex(nextIndex);
+    }
+
+    function playPrev() {
+      if (activeQueue.length === 0) return;
+      let prevIndex = currentQueueIndex - 1;
+      if (prevIndex < 0) {
+        if (isRepeating) {
+          prevIndex = activeQueue.length - 1;
+        } else {
+          // Start of queue
+          return;
+        }
+      }
+      playVideoIndex(prevIndex);
+    }
+
+    function removeFromQueue(uuid) {
+      const idx = activeQueue.findIndex(v => v.uuid === uuid);
+      if (idx === -1) return;
+
+      activeQueue.splice(idx, 1);
+
+      if (currentQueueIndex === idx) {
+        // We deleted the active video
+        if (activeQueue.length === 0) {
+          currentQueueIndex = -1;
+        } else {
+          currentQueueIndex = Math.min(idx, activeQueue.length - 1);
+          playVideoIndex(currentQueueIndex);
+        }
+      } else if (currentQueueIndex > idx) {
+        currentQueueIndex--;
+      }
+
+      saveQueue();
+      renderQueue();
+    }
+
+    function renderQueue() {
+      if (activeQueue.length === 0) {
+        queueListContainer.innerHTML = `<li style="font-size: 0.85rem; color: var(--text-muted); text-align: center; padding: 40px 0;">La cola está vacía.</li>`;
+        return;
+      }
+
+      queueListContainer.innerHTML = activeQueue.map((v, index) => `
+        <li class="queue-item ${index === currentQueueIndex ? 'active' : ''}" data-uuid="${v.uuid}" data-index="${index}">
+          <img src="${v.thumbnail}" class="queue-thumb" alt="Thumb">
+          <div class="queue-info">
+            <h4 class="queue-title">${v.title}</h4>
+            <span style="font-size: 0.75rem; color: var(--text-secondary);">${v.channel}</span>
+          </div>
+          <div class="queue-actions">
+            <!-- Add to custom playlist icon -->
+            <button class="btn-add-to-custom" title="Añadir a mi playlist"><i class="fa-solid fa-folder-plus"></i></button>
+            <button class="btn-remove-queue" title="Eliminar"><i class="fa-solid fa-trash"></i></button>
+          </div>
+        </li>
+      `).join('');
+
+      queueListContainer.querySelectorAll('.queue-item').forEach(item => {
+        const index = parseInt(item.dataset.index);
+        const uuid = item.dataset.uuid;
+        const video = activeQueue[index];
+
+        item.addEventListener('click', (e) => {
+          if (e.target.closest('.queue-actions')) return;
+          playVideoIndex(index);
+        });
+
+        item.querySelector('.btn-remove-queue').addEventListener('click', () => {
+          removeFromQueue(uuid);
+        });
+
+        item.querySelector('.btn-add-to-custom').addEventListener('click', () => {
+          openPlaylistPicker(video);
+        });
+      });
+    }
+
+    // ── Playlist Picker Modal ────────────────────────
+    const playlistPickerModal = document.getElementById('playlist-picker-modal');
+    const ppListContainer = document.getElementById('pp-list-container');
+    const ppVideoTitle = document.getElementById('pp-video-title');
+    const ppBtnClose = document.getElementById('pp-btn-close');
+    const ppBtnCancel = document.getElementById('pp-btn-cancel');
+
+    ppBtnClose.addEventListener('click', closePlaylistPicker);
+    ppBtnCancel.addEventListener('click', closePlaylistPicker);
+    playlistPickerModal.addEventListener('click', (e) => {
+      if (e.target === playlistPickerModal) closePlaylistPicker();
+    });
+
+    function openPlaylistPicker(video) {
+      const keys = Object.keys(customPlaylists);
+      ppVideoTitle.textContent = video.title;
+
+      if (keys.length === 0) {
+        ppListContainer.innerHTML = `
+          <div style="text-align:center; padding:28px 0; color:var(--text-muted);">
+            <i class="fa-solid fa-folder-open" style="font-size:2rem; margin-bottom:10px; display:block;"></i>
+            <p style="font-size:0.85rem;">No tienes playlists creadas.<br>Crea una en la barra lateral.</p>
+          </div>`;
+      } else {
+        ppListContainer.innerHTML = keys.map(k => {
+          const count = customPlaylists[k].length;
+          const already = customPlaylists[k].some(v => v.id === video.id);
+          return `
+            <div class="pp-item ${already ? 'pp-item-done' : ''}" data-name="${k}" style="${already ? 'opacity:.5;pointer-events:none;' : ''}">
+              <div class="pp-item-icon">
+                ${already
+              ? '<i class="fa-solid fa-check" style="color:#4ade80;"></i>'
+              : '<i class="fa-solid fa-list"></i>'}
+              </div>
+              <span class="pp-item-name">${k}</span>
+              <span class="pp-item-count">${count} video${count !== 1 ? 's' : ''}</span>
+              ${already ? '<span style="font-size:0.72rem;color:#4ade80;margin-left:2px;"><i class="fa-solid fa-circle-check"></i></span>' : ''}
+            </div>`;
+        }).join('');
+
+        ppListContainer.querySelectorAll('.pp-item:not(.pp-item-done)').forEach(el => {
+          el.addEventListener('click', async () => {
+            const targetList = el.dataset.name;
+            closePlaylistPicker();
+            try {
+              const result = await apiCall('add_video', {
+                playlist: targetList,
+                video_id: video.id,
+                title: video.title,
+                channel: video.channel || '',
+                thumbnail: video.thumbnail
+              });
+              if (result.error) { showToast(result.error, 'error'); return; }
+            } catch (err) {
+              console.warn('API add_video failed, adding locally only.');
+            }
+            customPlaylists[targetList].push({
+              id: video.id,
+              title: video.title,
+              channel: video.channel,
+              thumbnail: video.thumbnail
+            });
+            showToast(`✓ Añadido a "${targetList}"`);
+            if (currentPlaylist === targetList) loadPlaylist(currentPlaylist);
+          });
+        });
+      }
+
+      playlistPickerModal.style.display = 'flex';
+    }
+
+    function closePlaylistPicker() {
+      playlistPickerModal.style.display = 'none';
+    }
+
+    // ── Toast Notification ───────────────────────────
+    function showToast(msg, type = 'success') {
+      const t = document.createElement('div');
+      t.textContent = msg;
+      t.style.cssText = `
+        position:fixed; bottom:28px; left:50%; transform:translateX(-50%) translateY(20px);
+        background:${type === 'error' ? '#ef4444' : '#22c55e'};
+        color:#fff; padding:10px 22px; border-radius:30px;
+        font-size:0.85rem; font-weight:600; z-index:9999;
+        box-shadow:0 6px 24px rgba(0,0,0,0.4);
+        opacity:0; transition:opacity .25s, transform .25s;
+        pointer-events:none; white-space:nowrap;
+      `;
+      document.body.appendChild(t);
+      requestAnimationFrame(() => {
+        t.style.opacity = '1';
+        t.style.transform = 'translateX(-50%) translateY(0)';
+      });
+      setTimeout(() => {
+        t.style.opacity = '0';
+        t.style.transform = 'translateX(-50%) translateY(12px)';
+        setTimeout(() => t.remove(), 300);
+      }, 2800);
+    }
+
+
+    function updateQueueActiveState() {
+      queueListContainer.querySelectorAll('.queue-item').forEach((item, index) => {
+        if (index === currentQueueIndex) {
+          item.classList.add('active');
+        } else {
+          item.classList.remove('active');
+        }
+      });
+    }
+
+    // Direct YouTube URL submission logic
+    function submitDirectUrl() {
+      const input = directUrlInput.value.trim();
+      if (!input) return;
+
+      const videoId = extractYouTubeId(input);
+      if (!videoId) {
+        alert('Enlace o ID de YouTube inválido. Asegúrate de copiar el enlace de manera correcta.');
+        return;
+      }
+
+      // Fetch video title and details from open noembed JSON API or create placeholder
+      resultsHeading.textContent = "Cargando video...";
+
+      fetch(`https://noembed.com/embed?url=https://www.youtube.com/watch?v=${videoId}`)
+        .then(res => res.json())
+        .then(data => {
+          const video = {
+            id: videoId,
+            title: data.title || 'Video de YouTube (' + videoId + ')',
+            channel: data.author_name || 'YouTube',
+            thumbnail: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`
+          };
+          playVideoNow(video);
+          urlModal.style.display = 'none';
+          directUrlInput.value = '';
+        })
+        .catch(err => {
+          // Fallback if network issue
+          const video = {
+            id: videoId,
+            title: 'Video (' + videoId + ')',
+            channel: 'YouTube Direct',
+            thumbnail: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`
+          };
+          playVideoNow(video);
+          urlModal.style.display = 'none';
+          directUrlInput.value = '';
+        });
+    }
+
+    // Extract YouTube ID from link
+    function extractYouTubeId(url) {
+      if (url.length === 11) return url; // Already an ID
+      const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+      const match = url.match(regExp);
+      return (match && match[2].length === 11) ? match[2] : null;
+    }
+
+    // Perform YouTube Search using Public Invidious API
+    let activeSearchController;
+    async function performSearch() {
+      const query = searchInput.value.trim();
+      if (!query) return;
+
+      resultsHeading.textContent = `Buscando: "${query}"...`;
+      resultsHeading.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      videoResultsContainer.innerHTML = `
+        <div style="grid-column: 1/-1; text-align: center; padding: 40px;">
+          <i class="fa-solid fa-circle-notch fa-spin" style="font-size: 2.5rem; color: var(--accent); margin-bottom: 12px;"></i>
+          <p>Buscando videos en tiempo real...</p>
+        </div>
+      `;
+
+      try {
+        const data = await apiCall('search_youtube', { query });
+        if (data && data.success && data.data && data.data.length > 0) {
+          resultsHeading.textContent = `Resultados para: "${query}"`;
+          renderVideoGrid(data.data);
+        } else {
+          resultsHeading.textContent = `No se pudieron obtener resultados para: "${query}"`;
+          videoResultsContainer.innerHTML = `
+            <div style="grid-column: 1/-1; text-align: center; padding: 40px; color: var(--text-secondary);">
+              <i class="fa-solid fa-search" style="font-size: 2.5rem; color: var(--text-muted); margin-bottom: 12px;"></i>
+              <p>${data.error || 'Intenta con otros términos.'}</p>
+            </div>
+          `;
+        }
+      } catch (e) {
+        resultsHeading.textContent = `Error al buscar: "${query}"`;
+        videoResultsContainer.innerHTML = `
+          <div style="grid-column: 1/-1; text-align: center; padding: 40px; color: var(--text-secondary);">
+            <i class="fa-solid fa-triangle-exclamation" style="font-size: 2.5rem; color: var(--text-muted); margin-bottom: 12px;"></i>
+            <p>Error de conexión al servidor. Inténtalo de nuevo.</p>
+          </div>
+        `;
+      }
+    }
+
+    // ── Related Videos ───────────────────────────────
+    let lastRelatedVideoId = '';
+
+    async function fetchRelatedVideos(videoId, videoTitle) {
+      if (!videoId || videoId === lastRelatedVideoId) return;
+      lastRelatedVideoId = videoId;
+      console.log('[Related] Fetching related videos for:', videoId, videoTitle);
+
+      relatedSection.style.display = 'block';
+      relatedHeading.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles" style="color: var(--accent); margin-right: 6px;"></i> Relacionados: ${videoTitle || 'Video actual'}`;
+      relatedResultsContainer.innerHTML = `
+        <div style="grid-column: 1/-1; text-align: center; padding: 30px;">
+          <i class="fa-solid fa-circle-notch fa-spin" style="font-size: 2rem; color: var(--accent); margin-bottom: 10px;"></i>
+          <p style="color: var(--text-secondary); font-size: 0.85rem;">Buscando videos relacionados...</p>
+        </div>
+      `;
+
+      try {
+        const data = await apiCall('related_videos', { video_id: videoId, title: videoTitle });
+        if (data && data.success && data.data && data.data.length > 0) {
+          renderRelatedGrid(data.data);
+        } else {
+          relatedResultsContainer.innerHTML = `
+            <div style="grid-column: 1/-1; text-align: center; padding: 20px; color: var(--text-muted); font-size: 0.85rem;">
+              <i class="fa-solid fa-link-slash" style="font-size: 1.5rem; margin-bottom: 8px; display: block;"></i>
+              No se encontraron videos relacionados.
+            </div>
+          `;
+        }
+      } catch (e) {
+        relatedResultsContainer.innerHTML = `
+          <div style="grid-column: 1/-1; text-align: center; padding: 20px; color: var(--text-muted); font-size: 0.85rem;">
+            Error al cargar relacionados.
+          </div>
+        `;
+      }
+    }
+
+    function renderRelatedGrid(videos) {
+      relatedResultsContainer.innerHTML = videos.map((v, index) => `
+        <div class="video-card" data-id="${v.id}" data-index="${index}">
+          <div class="video-thumbnail-container">
+            <img class="video-thumbnail" src="${v.thumbnail}" alt="Thumbnail">
+            <span class="video-duration">Ver en TV</span>
+          </div>
+          <div class="video-info">
+            <h4 class="video-title">${v.title}</h4>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: auto;">
+              <span class="video-channel">${v.channel}</span>
+              <div style="display: flex; gap: 4px;">
+                <button class="btn btn-save-playlist" title="Guardar en playlist" style="padding: 6px 8px; font-size: 0.75rem;"><i class="fa-solid fa-folder-plus"></i></button>
+                <button class="btn btn-primary btn-play-now" title="Reproducir ahora" style="padding: 6px 8px; font-size: 0.75rem;"><i class="fa-solid fa-play"></i></button>
+              </div>
+            </div>
+          </div>
+        </div>
+      `).join('');
+
+      relatedResultsContainer.querySelectorAll('.video-card').forEach(card => {
+        const idx = card.dataset.index;
+        const video = videos[idx];
+
+        card.querySelector('.btn-save-playlist').addEventListener('click', (e) => {
+          e.stopPropagation();
+          openPlaylistPicker(video);
+        });
+
+        const handleCardAction = async (e) => {
+          e.stopPropagation();
+          const action = await promptVideoAction();
+          if (action === 'play') {
+            playVideoNow(video);
+          } else if (action === 'queue') {
+            addToQueue(video);
+          }
+        };
+
+        card.querySelector('.btn-play-now').addEventListener('click', handleCardAction);
+        card.addEventListener('click', handleCardAction);
+      });
+    }
+
+    // Storage Utilities
+    function saveQueue() {
+      localStorage.setItem('yt_active_queue', JSON.stringify(activeQueue));
+      localStorage.setItem('yt_queue_index', currentQueueIndex);
+    }
+
+    // saveCustomPlaylists is no longer needed — data is persisted via api.php
+    // Kept as a no-op so any remaining references don't break
+    function saveCustomPlaylists() { }
+
+    // Helper functions
+    function formatTime(secs) {
+      if (isNaN(secs) || secs === null) return '0:00';
+      const m = Math.floor(secs / 60);
+      const s = Math.floor(secs % 60);
+      return `${m}:${s < 10 ? '0' : ''}${s}`;
+    }
+
+    function updateVolumeIcon(volume) {
+      if (volume === 0) {
+        volumeIcon.className = 'fa-solid fa-volume-mute';
+      } else if (volume < 40) {
+        volumeIcon.className = 'fa-solid fa-volume-low';
+      } else {
+        volumeIcon.className = 'fa-solid fa-volume-high';
+      }
+    }
+
+    // Mobile Tab Navigation removed for vertical scrolling index2.html
+
+    // Request Fullscreen on first user interaction (for PWA Safari iOS)
+    document.body.addEventListener('click', () => {
+      const docElm = document.documentElement;
+      if (docElm.requestFullscreen) docElm.requestFullscreen().catch(() => { });
+      else if (docElm.webkitRequestFullscreen) docElm.webkitRequestFullscreen();
+      else if (docElm.mozRequestFullScreen) docElm.mozRequestFullScreen();
+      else if (docElm.msRequestFullscreen) docElm.msRequestFullscreen();
+    }, { once: true });
+  </script>
+</body>
+
+</html>
